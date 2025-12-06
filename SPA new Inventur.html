@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Gebrauchtteile Bestands- und Einnahmeverwaltung</title>
+    <style>
+        /* --- Allgemeine Formatierung --- */
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f4; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input:not([type="date"]):not([type="file"]), select, button, .groupset-tag { margin-top: 5px; }
+        input[type="number"], input[type="text"], input[type="date"], select { width: calc(100% - 22px); padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        /* --- Button-Styling --- */
+        button { padding: 8px 12px; margin-top: 20px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;}
+        button:hover { opacity: 0.9; }
+        .btn-delete { background-color: #dc3545; }
+        .btn-edit { background-color: #ffc107; color: #333; }
+        .btn-csv, .btn-import { background-color: #28a745; }
+        .btn-small { padding: 4px 8px; margin-top: 0; }
+        .btn-bestands { background-color: #17a2b8; }
+
+        /* --- Tabellen-Styling --- */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #f0f0f0; }
+        .gewinn-positiv { color: green; font-weight: bold; }
+        .gewinn-negativ { color: red; font-weight: bold; }
+        .lagerwert { color: #17a2b8; font-weight: bold; }
+
+        /* --- Gruppen Tags --- */
+        .groupset-list { margin-top: 10px; margin-bottom: 20px;}
+        .groupset-category { margin-top: 15px; font-weight: bold; color: #555; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .groupset-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .groupset-tag { background-color: #e9ecef; color: #495057; padding: 5px 10px; border-radius: 20px; cursor: pointer; font-size: 0.9em; transition: background-color 0.2s; }
+        .groupset-tag:hover { background-color: #ced4da; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🚲 Gebrauchtteile Bestands- & Einnahmeverwaltung</h1>
+    
+    <div id="eingabe-formular">
+        <h2>Neue Transaktion erfassen</h2>
+
+        <div class="groupset-list">
+            <div class="groupset-category">Schnellwahl: Groupsets</div>
+            <div class="groupset-tags">
+                <span class="groupset-tag" onclick="setGroupset('Shimano XTR')">XTR</span>
+                <span class="groupset-tag" onclick="setGroupset('Shimano XT')">XT</span>
+                <span class="groupset-tag" onclick="setGroupset('Shimano LX')">LX</span>
+                <span class="groupset-tag" onclick="setGroupset('Shimano Dura Ace')">Dura Ace</span>
+                <span class="groupset-tag" onclick="setGroupset('Shimano Ultegra')">Ultegra</span>
+                <span class="groupset-tag" onclick="setGroupset('Shimano 105')">105</span>
+                <span class="groupset-tag" onclick="setGroupset('Shimano Tiagra')">Tiagra</span>
+            </div>
+        </div>
+        <form id="einnahmeForm">
+            <input type="hidden" id="editIndex" value="-1">
+
+            <label for="typ">Transaktionstyp:</label>
+            <select id="typ" required>
+                <option value="verkauf">Verkauf</option>
+                <option value="einkauf">Einkauf (Bestand)</option>
+            </select>
+            
+            <label for="kategorie">Kategorie (Dropdown):</label>
+            <select id="kategorie" required>
+                <option value="Sonstiges">Sonstiges</option>
+                <option value="Rahmen">Rahmen</option>
+                <option value="Umwerfer">Umwerfer</option>
+                <option value="Schaltwerk">Schaltwerk</option>
+                <option value="Bremsen">Bremsen</option>
+                <option value="Kurbelgarnitur">Kurbelgarnitur</option>
+                <option value="Laufradsatz">Laufradsatz</option>
+                <option value="Sattel/Sattelstütze">Sattel/Sattelstütze</option>
+                <option value="Lenker/Vorbau">Lenker/Vorbau</option>
+                <option value="Gruppenset">Gruppenset (Komplett)</option>
+            </select>
+
+            <label for="datum">Datum:</label>
+            <input type="date" id="datum" value="" required>
+
+            <label for="artikelName">Artikelname:</label>
+            <input type="text" id="artikelName" required>
+            
+            <label for="einkaufspreis">Einkaufspreis (€):</label>
+            <input type="number" id="einkaufspreis" step="0.01" value="0.00" required>
+
+            <label for="einnahme_verkaufspreis">Einnahme/Verkaufspreis (€):</label>
+            <input type="number" id="einnahme_verkaufspreis" step="0.01" value="0.00" required>
+
+            <label for="kosten">Sonstige Kosten (Porto, Inserat, o.ä.):</label>
+            <input type="number" id="kosten" step="0.01" value="0.00">
+
+            <button type="submit" id="submitButton">Transaktion speichern</button>
+            <button type="button" id="cancelButton" style="display:none;" onclick="abbrechenBearbeitung()">Abbrechen</button>
+        </form>
+    </div>
+    
+    <hr>
+
+    <div id="uebersicht">
+        <h2>Übersicht der Transaktionen</h2>
+        <p>Gesamtgewinn (Verkäufe abzgl. Kosten): <strong id="gesamtGewinn">0.00 €</strong></p>
+        <p>Geschätzter **aktueller Lagerwert** (Summe aller offenen Einkaufspreise): <strong id="lagerwertSumme" class="lagerwert">0.00 €</strong></p>
+        
+        <label for="csvFileInput" style="display:inline-block; margin-right: 10px; margin-top: 0;">
+            <input type="file" id="csvFileInput" accept=".csv" style="display:none;">
+            <button type="button" onclick="document.getElementById('csvFileInput').click()" class="btn-import" style="margin-top: 0;">CSV Importieren</button>
+        </label>
+        
+        <button onclick="exportiereAlsCSV()" class="btn-csv" style="margin-top: 0;">CSV Export (Vollständig)</button>
+        <button onclick="exportiereBestand()" class="btn-bestands" style="margin-top: 0;">CSV Export (Bestand)</button>
+        <button onclick="alleDatenLoeschen()" class="btn-delete" style="margin-top: 0;">Alle Daten löschen</button>
+
+        <table id="einnahmenTabelle">
+            <thead>
+                <tr>
+                    <th>Datum</th>
+                    <th>Typ</th>
+                    <th>Kategorie</th>
+                    <th>Artikel</th>
+                    <th>EK-Preis</th>
+                    <th>VK-Preis</th>
+                    <th>Kosten</th>
+                    <th>Netto-Wert</th>
+                    <th>Aktionen</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'fahrradteileTransaktionen';
+        
+        // Elemente
+        const einnahmeForm = document.getElementById('einnahmeForm');
+        const einnahmenTabelleBody = document.querySelector('#einnahmenTabelle tbody');
+        const gesamtGewinnElement = document.getElementById('gesamtGewinn');
+        const lagerwertSummeElement = document.getElementById('lagerwertSumme');
+        const submitButton = document.getElementById('submitButton');
+        const cancelButton = document.getElementById('cancelButton');
+        const editIndexInput = document.getElementById('editIndex');
+        const csvFileInput = document.getElementById('csvFileInput');
+        const typSelect = document.getElementById('typ');
+        const kategorieSelect = document.getElementById('kategorie'); // NEU
+        const datumInput = document.getElementById('datum');
+        const einkaufspreisInput = document.getElementById('einkaufspreis');
+        const einnahmeVerkaufspreisInput = document.getElementById('einnahme_verkaufspreis');
+        const kostenInput = document.getElementById('kosten');
+
+        // Setze das heutige Datum beim Laden
+        datumInput.value = new Date().toISOString().split('T')[0];
+
+        // =========================================================================
+        // 1. Logik zur Datenverwaltung
+        // =========================================================================
+
+        function ladeEinnahmen() {
+            const jsonString = localStorage.getItem(STORAGE_KEY);
+            try {
+                return jsonString ? JSON.parse(jsonString) : [];
+            } catch (e) {
+                console.error("Fehler beim Parsen der gespeicherten JSON-Daten:", e);
+                return [];
+            }
+        }
+
+        function speichereEinnahmen(einnahmen) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(einnahmen));
+        }
+
+        /** Berechnet den Netto-Wert des Eintrags: Gewinn (bei Verkauf) oder Kosten (bei Einkauf) */
+        function berechneAktuellenWert(eintrag) {
+            if (eintrag.typ === 'verkauf') {
+                // Netto-Gewinn: Verkaufspreis - Einkaufspreis - Kosten
+                return eintrag.einnahmeVerkaufspreis - eintrag.einkaufspreis - eintrag.kosten; 
+            } else if (eintrag.typ === 'einkauf') {
+                // Gebundene Kosten: - (Einkaufspreis + Kosten)
+                return -(eintrag.einkaufspreis + eintrag.kosten); 
+            }
+            return 0;
+        }
+
+        window.setGroupset = function(name) {
+            const artikelFeld = document.getElementById('artikelName');
+            artikelFeld.value = name + ' ';
+            artikelFeld.focus();
+        }
+        
+        // =========================================================================
+        // 2. Transaktions- und Formular-Handling
+        // =========================================================================
+
+        einnahmeForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            const neuerEintrag = {
+                datum: datumInput.value,
+                typ: typSelect.value,
+                kategorie: kategorieSelect.value, // NEU: Kategorie
+                artikelName: document.getElementById('artikelName').value.trim(),
+                einkaufspreis: parseFloat(einkaufspreisInput.value) || 0,
+                einnahmeVerkaufspreis: parseFloat(einnahmeVerkaufspreisInput.value) || 0,
+                kosten: parseFloat(kostenInput.value) || 0,
+                // Status bleibt für die einfache Lagerwertberechnung
+                istImBestand: (typSelect.value === 'einkauf'),
+            };
+            
+            const einnahmen = ladeEinnahmen();
+            const index = parseInt(editIndexInput.value);
+
+            if (index > -1) {
+                einnahmen[index] = neuerEintrag;
+            } else {
+                einnahmen.push(neuerEintrag);
+            }
+
+            speichereEinnahmen(einnahmen);
+            zeigeEinnahmenAn(einnahmen);
+            abbrechenBearbeitung();
+        });
+
+        window.starteBearbeitung = function(index) {
+            const einnahmen = ladeEinnahmen();
+            const eintrag = einnahmen[index];
+
+            datumInput.value = eintrag.datum || new Date().toISOString().split('T')[0];
+            typSelect.value = eintrag.typ;
+            kategorieSelect.value = eintrag.kategorie || 'Sonstiges'; // NEU: Kategorie laden
+            document.getElementById('artikelName').value = eintrag.artikelName;
+            einkaufspreisInput.value = eintrag.einkaufspreis;
+            einnahmeVerkaufspreisInput.value = eintrag.einnahmeVerkaufspreis;
+            kostenInput.value = eintrag.kosten;
+            
+            editIndexInput.value = index;
+            submitButton.textContent = 'Änderungen speichern';
+            cancelButton.style.display = 'inline-block';
+            document.getElementById('eingabe-formular').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        window.loescheEintrag = function(index) {
+            if (confirm('Soll dieser Eintrag wirklich gelöscht werden?')) {
+                const einnahmen = ladeEinnahmen();
+                einnahmen.splice(index, 1);
+                speichereEinnahmen(einnahmen);
+                zeigeEinnahmenAn();
+                abbrechenBearbeitung();
+            }
+        }
+
+        window.abbrechenBearbeitung = function() {
+            einnahmeForm.reset();
+            datumInput.value = new Date().toISOString().split('T')[0];
+            typSelect.value = 'verkauf';
+            kategorieSelect.value = 'Sonstiges'; // NEU: Kategorie zurücksetzen
+            einkaufspreisInput.value = '0.00';
+            einnahmeVerkaufspreisInput.value = '0.00';
+            kostenInput.value = '0.00';
+            editIndexInput.value = -1;
+            submitButton.textContent = 'Transaktion speichern';
+            cancelButton.style.display = 'none';
+        }
+
+        // =========================================================================
+        // 3. Anzeige und Berechnung der Kennzahlen
+        // =========================================================================
+        
+        function zeigeEinnahmenAn() {
+            const transaktionen = ladeEinnahmen();
+            einnahmenTabelleBody.innerHTML = '';
+            
+            let gesamtGewinn = 0;
+            let aktuellerLagerwert = 0;
+
+            transaktionen.forEach((eintrag, index) => {
+                const aktuellerWert = berechneAktuellenWert(eintrag);
+                
+                // Zum Gesamtgewinn/Verlust zählen
+                if (eintrag.typ === 'verkauf') {
+                    gesamtGewinn += aktuellerWert;
+                }
+                
+                // Lagerwert: Summe der Investitionen aller Einkäufe
+                if (eintrag.typ === 'einkauf') {
+                     aktuellerLagerwert += (eintrag.einkaufspreis + eintrag.kosten);
+                }
+
+                const row = einnahmenTabelleBody.insertRow();
+                row.insertCell(0).textContent = eintrag.datum;
+                row.insertCell(1).textContent = eintrag.typ.toUpperCase();
+                row.insertCell(2).textContent = eintrag.kategorie || 'Sonstiges'; // NEU: Kategorie anzeigen
+                row.insertCell(3).textContent = eintrag.artikelName;
+                row.insertCell(4).textContent = eintrag.einkaufspreis.toFixed(2) + ' €'; 
+                row.insertCell(5).textContent = eintrag.einnahmeVerkaufspreis.toFixed(2) + ' €'; 
+                row.insertCell(6).textContent = eintrag.kosten.toFixed(2) + ' €';
+                
+                const aktuellerWertZelle = row.insertCell(7);
+                aktuellerWertZelle.textContent = aktuellerWert.toFixed(2) + ' €';
+                aktuellerWertZelle.classList.add(aktuellerWert >= 0 ? 'gewinn-positiv' : 'gewinn-negativ');
+
+                const aktionenZelle = row.insertCell(8); // NEU: Index ist 8
+                const editBtn = document.createElement('button');
+                editBtn.textContent = 'Bearbeiten';
+                editBtn.classList.add('btn-edit', 'btn-small');
+                editBtn.onclick = () => starteBearbeitung(index);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Löschen';
+                deleteBtn.classList.add('btn-delete', 'btn-small');
+                deleteBtn.onclick = () => loescheEintrag(index);
+                
+                aktionenZelle.appendChild(editBtn);
+                aktionenZelle.appendChild(deleteBtn);
+            });
+
+            gesamtGewinnElement.textContent = gesamtGewinn.toFixed(2) + ' €';
+            lagerwertSummeElement.textContent = aktuellerLagerwert.toFixed(2) + ' €';
+        }
+
+        // =========================================================================
+        // 4. Export-Funktionen (Angepasst an neue Spalte)
+        // =========================================================================
+
+        /** Hilfsfunktion zum Auslösen des Downloads */
+        function starteDownload(csvContent, filename) {
+            const blob = new Blob(["\uFEFF", csvContent], { type: 'text/csv;charset=utf-8;' }); 
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.click();
+        }
+
+        const HEADER_FIELDS = ["Datum", "Typ", "Kategorie", "Artikelname", "EK-Preis (€)", "VK-Preis (€)", "Kosten (€)", "Netto-Wert (€)"];
+
+        function erstelleCSV(transaktionen) {
+            let csvContent = HEADER_FIELDS.join(';') + "\n";
+            
+            transaktionen.forEach(eintrag => {
+                const nettoWert = berechneAktuellenWert(eintrag);
+                const row = [
+                    eintrag.datum,
+                    eintrag.typ,
+                    eintrag.kategorie || 'Sonstiges', // NEU: Kategorie
+                    `"${eintrag.artikelName.replace(/"/g, '""')}"`,
+                    eintrag.einkaufspreis.toFixed(2).replace('.', ','),
+                    eintrag.einnahmeVerkaufspreis.toFixed(2).replace('.', ','),
+                    eintrag.kosten.toFixed(2).replace('.', ','),
+                    nettoWert.toFixed(2).replace('.', ',')
+                ];
+                csvContent += row.join(';') + "\n";
+            });
+            return csvContent;
+        }
+
+        /** Exportiert den aktuellen (vereinfachten) Bestand als CSV. */
+        window.exportiereBestand = function() {
+            const transaktionen = ladeEinnahmen();
+            if (transaktionen.length === 0) {
+                alert('Keine Daten zum Exportieren vorhanden.');
+                return;
+            }
+            // Filter: Nur Einkäufe exportieren
+            const einkaufTransaktionen = transaktionen.filter(t => t.typ === 'einkauf');
+            
+            const csvContent = erstelleCSV(einkaufTransaktionen);
+            const filename = 'fahrradteile_bestand_' + new Date().toISOString().split('T')[0] + '.csv';
+            starteDownload(csvContent, filename);
+        }
+
+        /** Exportiert alle Transaktionen als CSV (Vollständig). */
+        window.exportiereAlsCSV = function() {
+            const transaktionen = ladeEinnahmen();
+            if (transaktionen.length === 0) {
+                alert('Keine Daten zum Exportieren vorhanden.');
+                return;
+            }
+
+            const csvContent = erstelleCSV(transaktionen);
+            const filename = 'fahrradteile_transaktionen_vollstaendig_' + new Date().toISOString().split('T')[0] + '.csv';
+            starteDownload(csvContent, filename);
+        }
+
+        // =========================================================================
+        // 5. CSV-Import (Angepasst an neue Spalte)
+        // =========================================================================
+
+        csvFileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                verarbeiteImportierteCSV(e.target.result);
+            };
+            reader.readAsText(file, 'UTF-8');
+            event.target.value = '';
+        });
+
+        /** Verarbeitet die CSV-Daten (erwartet 7 Spalten nach Header). */
+        function verarbeiteImportierteCSV(csvText) {
+            // Ignoriere leere Zeilen und Header (prüfe auf Datum in erster Spalte)
+            const lines = csvText.split('\n').filter(line => line.trim() !== '' && !line.startsWith("Datum")); 
+            
+            if (lines.length === 0) {
+                alert('CSV-Datei enthält keine Datenzeilen.');
+                return;
+            }
+
+            const neueEinnahmen = [];
+            let fehlerZaehler = 0;
+
+            lines.forEach(line => {
+                const values = line.split(';');
+
+                // Prüft auf 7 Datenfelder (Datum, Typ, Kategorie, Artikel, EK, VK, Kosten)
+                if (values.length >= 7) { 
+                    try {
+                        const datum = values[0].trim();
+                        const typ = values[1].toLowerCase().trim();
+                        const kategorie = values[2].trim(); // NEU: Kategorie
+                        const artikelName = values[3].replace(/"/g, '').trim();
+                        
+                        // Konvertierung von Komma zu Punkt für JS
+                        const einkaufspreis = parseFloat(values[4].replace(',', '.'));
+                        const einnahmeVerkaufspreis = parseFloat(values[5].replace(',', '.'));
+                        const kosten = parseFloat(values[6].replace(',', '.'));
+
+                        if (!isNaN(einkaufspreis) && !isNaN(einnahmeVerkaufspreis) && !isNaN(kosten) && (typ === 'verkauf' || typ === 'einkauf')) {
+                            neueEinnahmen.push({
+                                datum: datum,
+                                typ: typ,
+                                kategorie: kategorie,
+                                artikelName: artikelName,
+                                einkaufspreis: einkaufspreis,
+                                einnahmeVerkaufspreis: einnahmeVerkaufspreis,
+                                kosten: kosten,
+                                istImBestand: (typ === 'einkauf'),
+                            });
+                        } else {
+                            fehlerZaehler++;
+                        }
+                    } catch (e) {
+                        fehlerZaehler++;
+                    }
+                } else {
+                    fehlerZaehler++;
+                }
+            });
+
+            if (neueEinnahmen.length > 0) {
+                const aktuelleEinnahmen = ladeEinnahmen();
+                const bestaetigung = confirm(`Sollen ${neueEinnahmen.length} gültige Einträge zu den existierenden ${aktuelleEinnahmen.length} Einträgen hinzugefügt werden?`);
+
+                if (bestaetigung) {
+                    const kombinierteEinnahmen = aktuelleEinnahmen.concat(neueEinnahmen);
+                    speichereEinnahmen(kombinierteEinnahmen);
+                    zeigeEinnahmenAn();
+                    alert(`Import erfolgreich. ${neueEinnahmen.length} Einträge hinzugefügt. (Fehlerhafte/Ignorierte Zeilen: ${fehlerZaehler})`);
+                }
+            } else {
+                 alert('Keine gültigen Einträge in der CSV-Datei gefunden.');
+            }
+        }
+        
+        window.alleDatenLoeschen = function() {
+            if (confirm('Sollen wirklich ALLE gespeicherten Transaktionen gelöscht werden?')) {
+                localStorage.removeItem(STORAGE_KEY);
+                zeigeEinnahmenAn();
+                alert('Alle Daten wurden gelöscht.');
+            }
+        }
+
+        zeigeEinnahmenAn();
+    </script>
+
+</body>
+</html>
