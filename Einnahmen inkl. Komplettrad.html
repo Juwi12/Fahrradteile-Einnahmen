@@ -71,16 +71,19 @@
         </div>
         <form id="einnahmeForm">
             <input type="hidden" id="editIndex" value="-1">
+            <input type="hidden" id="transaktionsID" value="-1"> 
 
             <label for="typ">Transaktionstyp:</label>
             <select id="typ" required onchange="zeigeStatusFeld()">
-                <option value="einkauf">Einkauf (Bestand)</option> <option value="verkauf">Verkauf</option>
+                <option value="einkauf">Einkauf (Bestand)</option>
+                <option value="verkauf">Verkauf</option>
             </select>
             
             <label for="kategorie">Kategorie (Dropdown):</label>
             <select id="kategorie" required>
                 <option value="Sonstiges">Sonstiges</option>
-                <option value="Komplettrad">Komplettrad</option> <option value="Rahmen">Rahmen</option>
+                <option value="Komplettrad">Komplettrad</option>
+                <option value="Rahmen">Rahmen</option>
                 <option value="Umwerfer">Umwerfer</option>
                 <option value="Schaltwerk">Schaltwerk</option>
                 <option value="Bremsen">Bremsen</option>
@@ -154,7 +157,8 @@
             <label for="exportKategorieFilter" style="display:inline-block; margin-right: 5px; margin-top: 0; font-weight: normal;">Exportiere nach Kategorie (Zeilen):</label>
             <select id="exportKategorieFilter" style="width: auto;">
                 <option value="alle">Alle Kategorien (Vollständig)</option>
-                <option value="Komplettrad">Komplettrad</option> <option value="Rahmen">Rahmen</option>
+                <option value="Komplettrad">Komplettrad</option>
+                <option value="Rahmen">Rahmen</option>
                 <option value="Umwerfer">Umwerfer</option>
                 <option value="Schaltwerk">Schaltwerk</option>
                 <option value="Bremsen">Bremsen</option>
@@ -170,15 +174,16 @@
         <table id="einnahmenTabelle">
             <thead>
                 <tr>
-                    <th>Datum</th>
+                    <th onclick="sortiereTabelle(0)">ID ↕</th>
+                    <th onclick="sortiereTabelle(1)">Datum ↕</th>
                     <th>Typ</th>
-                    <th onclick="sortiereTabelle(2)">Kategorie ↕</th>
-                    <th>Artikel</th>
-                    <th>Warenwert</th>
-                    <th>VK-Preis</th>
-                    <th>Kosten</th>
-                    <th>Status</th>
-                    <th>Netto-Wert</th>
+                    <th onclick="sortiereTabelle(3)">Kategorie ↕</th>
+                    <th onclick="sortiereTabelle(4)">Artikel ↕</th>
+                    <th onclick="sortiereTabelle(5)">Warenwert ↕</th>
+                    <th onclick="sortiereTabelle(6)">VK-Preis ↕</th>
+                    <th onclick="sortiereTabelle(7)">Kosten ↕</th>
+                    <th onclick="sortiereTabelle(8)">Status ↕</th>
+                    <th onclick="sortiereTabelle(9)">Netto-Wert ↕</th>
                     <th>Aktionen</th>
                 </tr>
             </thead>
@@ -198,6 +203,7 @@
         const submitButton = document.getElementById('submitButton');
         const cancelButton = document.getElementById('cancelButton');
         const editIndexInput = document.getElementById('editIndex');
+        const transaktionsIDInput = document.getElementById('transaktionsID'); // NEU: ID Feld
         const csvFileInput = document.getElementById('csvFileInput');
         const typSelect = document.getElementById('typ');
         const kategorieSelect = document.getElementById('kategorie');
@@ -209,12 +215,9 @@
         const verkaufStatusSelect = document.getElementById('verkaufStatus');
         const exportStatusFilter = document.getElementById('exportStatusFilter');
         const exportKategorieFilter = document.getElementById('exportKategorieFilter');
-        const kategorieHeader = document.querySelector('#einnahmenTabelle thead tr th:nth-child(3)'); // Kategorie Header
-
+        
         // Setze das heutige Datum beim Laden
         datumInput.value = new Date().toISOString().split('T')[0];
-        
-        // **NEU:** Setze Typ auf 'einkauf' beim Laden
         typSelect.value = 'einkauf'; 
 
         // Funktion zur Anzeige/Ausblendung des Status-Feldes
@@ -227,27 +230,64 @@
                 verkaufStatusSelect.value = 'im_bestand';
             }
         }
-        zeigeStatusFeld(); // Aufruf beim Start, um Status-Container zu verstecken
+        zeigeStatusFeld(); 
         
         // =========================================================================
-        // 1. Logik zur Datenverwaltung
+        // 1. Logik zur Datenverwaltung (ID-Generierung, Migration)
         // =========================================================================
+
+        /** Findet die höchste aktuelle ID im Datensatz und gibt sie zurück. */
+        function getNextID(daten) {
+            if (daten.length === 0) return 1;
+            const maxID = daten.reduce((max, t) => Math.max(max, t.id || 0), 0);
+            return maxID + 1;
+        }
+
 
         function ladeEinnahmen() {
             const jsonString = localStorage.getItem(STORAGE_KEY);
             try {
                 const daten = jsonString ? JSON.parse(jsonString) : [];
                 
-                // Migrationslogik: Feldnamen und Status anpassen
+                let aenderungenGemacht = false;
+                let idCounter = getNextID(daten); // Starte Zähler basierend auf vorhandenen IDs
+
+                // Migration: ID zuweisen, falls fehlt
                 daten.forEach(eintrag => {
+                    // ID Zuweisung (wenn fehlt)
+                    if (!eintrag.id) {
+                        // Weisen Sie eine ID basierend auf dem aktuellen Zähler zu, 
+                        // was im Falle fehlender IDs die höchste ID + 1 wäre.
+                        // Für Konsistenz sollten wir hier besser die aktuelle ID verwenden, 
+                        // wenn wir sie nachträglich zuweisen.
+                        // Besser: Lassen Sie die ID nur beim Erstellen generieren.
+                        // Für alte Daten ohne ID, generieren wir eine temporäre ID zur Sortierung, 
+                        // aber das Speichern würde die Reihenfolge stören.
+                        // Wichtig: Beim ersten Start mit diesem Code, falls Daten ohne ID vorhanden sind, 
+                        // weisen wir die fortlaufende ID zu.
+                        eintrag.id = idCounter++;
+                        aenderungenGemacht = true;
+                    }
+                    
+                    // Andere Migrationen (wie gehabt)
                     if (eintrag.einkaufspreis !== undefined) {
                         eintrag.warenwertBeiUebernahme = eintrag.einkaufspreis;
                         delete eintrag.einkaufspreis;
+                        aenderungenGemacht = true;
                     }
                     if (eintrag.verkaufStatus === undefined || eintrag.verkaufStatus === 'offen') {
                         eintrag.verkaufStatus = 'im_bestand';
+                        aenderungenGemacht = true;
                     }
+                    // WICHTIG: Die automatische Migration von Sonstiges->Komplettrad ist hier DEAKTIVIERT, 
+                    // um die Kategorie 'Sonstiges' beizubehalten, wie zuletzt gewünscht.
                 });
+
+                // Konsistente ID-Werte abspeichern
+                if (aenderungenGemacht) {
+                    speichereEinnahmen(daten); 
+                }
+                
                 return daten;
 
             } catch (e) {
@@ -278,7 +318,13 @@
         einnahmeForm.addEventListener('submit', function(event) {
             event.preventDefault();
             
+            const einnahmen = ladeEinnahmen();
+            const index = parseInt(editIndexInput.value);
+            const isEditing = index > -1;
+
             const neuerEintrag = {
+                // NEU: ID beibehalten bei Bearbeitung, neue ID generieren bei neuer Transaktion
+                id: isEditing ? parseInt(transaktionsIDInput.value) : getNextID(einnahmen), 
                 datum: datumInput.value,
                 typ: typSelect.value,
                 kategorie: kategorieSelect.value,
@@ -289,10 +335,8 @@
                 verkaufStatus: typSelect.value === 'verkauf' ? verkaufStatusSelect.value : 'im_bestand',
             };
             
-            const einnahmen = ladeEinnahmen();
-            const index = parseInt(editIndexInput.value);
 
-            if (index > -1) {
+            if (isEditing) {
                 einnahmen[index] = neuerEintrag;
             } else {
                 einnahmen.push(neuerEintrag);
@@ -307,6 +351,7 @@
             const einnahmen = ladeEinnahmen();
             const eintrag = einnahmen[index];
 
+            transaktionsIDInput.value = eintrag.id; // NEU: ID in Formular laden
             datumInput.value = eintrag.datum || new Date().toISOString().split('T')[0];
             typSelect.value = eintrag.typ;
             kategorieSelect.value = eintrag.kategorie || 'Sonstiges';
@@ -341,54 +386,61 @@
         window.abbrechenBearbeitung = function() {
             einnahmeForm.reset();
             datumInput.value = new Date().toISOString().split('T')[0];
-            typSelect.value = 'einkauf'; // **NEU:** Setze Typ auf 'einkauf'
+            typSelect.value = 'einkauf'; 
             kategorieSelect.value = 'Sonstiges';
             warenwertBeiUebernahmeInput.value = '0.00';
             einnahmeVerkaufspreisInput.value = '0.00';
             kostenInput.value = '0.00';
             editIndexInput.value = -1;
+            transaktionsIDInput.value = -1; // NEU: ID zurücksetzen
             submitButton.textContent = 'Transaktion speichern';
             cancelButton.style.display = 'none';
             zeigeStatusFeld();
         }
         
         // =========================================================================
-        // 3. Sortierung
+        // 3. Sortierung (JETZT FÜR MEHRERE SPALTEN!)
         // =========================================================================
         
-        // Globaler Zustand für die Sortierung
-        let sortColumn = -1;
+        let sortColumnIndex = 0; // Default: Sortiere nach ID
         let sortDirection = 1; // 1 = aufsteigend, -1 = absteigend
 
-        /** Sortiert die Tabelle nach der angegebenen Spalte (Index). */
+        const sortierSpalten = {
+            0: (a, b) => (a.id || 0) - (b.id || 0), // ID (Numerisch)
+            1: (a, b) => a.datum.localeCompare(b.datum), // Datum (String)
+            3: (a, b) => (a.kategorie || 'Sonstiges').localeCompare(b.kategorie || 'Sonstiges', 'de', { sensitivity: 'base' }), // Kategorie (Alphabetisch)
+            4: (a, b) => a.artikelName.localeCompare(b.artikelName, 'de', { sensitivity: 'base' }), // Artikel (Alphabetisch)
+            5: (a, b) => a.warenwertBeiUebernahme - b.warenwertBeiUebernahme, // Warenwert (Numerisch)
+            6: (a, b) => a.einnahmeVerkaufspreis - b.einnahmeVerkaufspreis, // VK-Preis (Numerisch)
+            7: (a, b) => a.kosten - b.kosten, // Kosten (Numerisch)
+            8: (a, b) => (a.verkaufStatus || 'im_bestand').localeCompare(b.verkaufStatus || 'im_bestand', 'de', { sensitivity: 'base' }), // Status (Alphabetisch)
+            9: (a, b) => berechneAktuellenWert(a) - berechneAktuellenWert(b) // Netto-Wert (Numerisch)
+        };
+
         window.sortiereTabelle = function(columnIndex) {
             let transaktionen = ladeEinnahmen();
             
-            // Nur Spalte 2 (Kategorie) ist sortierbar
-            if (columnIndex !== 2) return; 
+            // Überprüfe, ob die Spalte sortierbar ist
+            if (!sortierSpalten[columnIndex]) return; 
 
-            // Wenn die gleiche Spalte geklickt wird, ändere die Sortierrichtung
-            if (sortColumn === columnIndex) {
+            // Sortierrichtung setzen
+            if (sortColumnIndex === columnIndex) {
                 sortDirection = -sortDirection;
             } else {
-                // Wenn eine neue Spalte geklickt wird, setze aufsteigend (1)
                 sortDirection = 1;
-                sortColumn = columnIndex;
+                sortColumnIndex = columnIndex;
             }
 
-            // Sortierfunktion basierend auf Kategorie (Index 2)
+            // Sortierung anwenden
             transaktionen.sort((a, b) => {
-                const valA = a.kategorie || 'Sonstiges';
-                const valB = b.kategorie || 'Sonstiges';
-                
-                // Normaler String-Vergleich (case-insensitive)
-                const comparison = valA.localeCompare(valB, 'de', { sensitivity: 'base' });
-                
+                const sortFunc = sortierSpalten[columnIndex];
+                const comparison = sortFunc(a, b);
                 return comparison * sortDirection;
             });
 
-            speichereEinnahmen(transaktionen); // Sortierte Liste speichern
-            zeigeEinnahmenAn(transaktionen); // Tabelle neu zeichnen
+            // WICHTIG: Die Sortierung wird im Speicher gespeichert, damit sie erhalten bleibt
+            speichereEinnahmen(transaktionen); 
+            zeigeEinnahmenAn(transaktionen); 
         }
 
 
@@ -403,12 +455,19 @@
             let gesamtGewinn = 0;
             let aktuellerLagerwert = 0;
             
-            // Header-Update: Pfeil für Sortierrichtung
-            let arrow = ' ↕';
-            if (sortColumn === 2) {
-                arrow = sortDirection === 1 ? ' ▲' : ' ▼';
-            }
-            kategorieHeader.innerHTML = `Kategorie${arrow}`;
+            // Header-Update: Pfeile für Sortierrichtung
+            document.querySelectorAll('#einnahmenTabelle th').forEach((th, index) => {
+                if (sortierSpalten[index]) {
+                    let text = th.textContent.replace(' ▲', '').replace(' ▼', '').replace(' ↕', '');
+                    if (index === sortColumnIndex) {
+                        text += sortDirection === 1 ? ' ▲' : ' ▼';
+                    } else {
+                        text += ' ↕';
+                    }
+                    th.textContent = text;
+                }
+            });
+
 
             transaktionen.forEach((eintrag, index) => {
                 const aktuellerWert = berechneAktuellenWert(eintrag);
@@ -421,25 +480,26 @@
                 }
 
                 const row = einnahmenTabelleBody.insertRow();
-                row.insertCell(0).textContent = eintrag.datum;
-                row.insertCell(1).textContent = eintrag.typ.toUpperCase();
-                row.insertCell(2).textContent = eintrag.kategorie || 'Sonstiges';
-                row.insertCell(3).textContent = eintrag.artikelName;
-                row.insertCell(4).textContent = eintrag.warenwertBeiUebernahme.toFixed(2) + ' €';
-                row.insertCell(5).textContent = eintrag.einnahmeVerkaufspreis.toFixed(2) + ' €'; 
-                row.insertCell(6).textContent = eintrag.kosten.toFixed(2) + ' €';
+                row.insertCell(0).textContent = eintrag.id; // NEU: ID
+                row.insertCell(1).textContent = eintrag.datum;
+                row.insertCell(2).textContent = eintrag.typ.toUpperCase();
+                row.insertCell(3).textContent = eintrag.kategorie || 'Sonstiges';
+                row.insertCell(4).textContent = eintrag.artikelName;
+                row.insertCell(5).textContent = eintrag.warenwertBeiUebernahme.toFixed(2) + ' €';
+                row.insertCell(6).textContent = eintrag.einnahmeVerkaufspreis.toFixed(2) + ' €'; 
+                row.insertCell(7).textContent = eintrag.kosten.toFixed(2) + ' €';
                 
-                // Status-Zelle
-                const statusZelle = row.insertCell(7);
-                statusZelle.textContent = eintrag.verkaufStatus.toUpperCase().replace('_', ' ');
-                statusZelle.classList.add('status-' + eintrag.verkaufStatus.toLowerCase().replace(/ /g, ''));
+                // Status-Zelle (Index 8)
+                const statusZelle = row.insertCell(8);
+                statusZelle.textContent = (eintrag.verkaufStatus || 'im_bestand').toUpperCase().replace('_', ' ');
+                statusZelle.classList.add('status-' + (eintrag.verkaufStatus || 'im_bestand').toLowerCase().replace(/ /g, ''));
 
 
-                const aktuellerWertZelle = row.insertCell(8);
+                const aktuellerWertZelle = row.insertCell(9);
                 aktuellerWertZelle.textContent = aktuellerWert.toFixed(2) + ' €';
                 aktuellerWertZelle.classList.add(aktuellerWert >= 0 ? 'gewinn-positiv' : 'gewinn-negativ');
 
-                const aktionenZelle = row.insertCell(9);
+                const aktionenZelle = row.insertCell(10); // Index 10
                 const editBtn = document.createElement('button');
                 editBtn.textContent = 'Bearbeiten';
                 editBtn.classList.add('btn-edit', 'btn-small');
@@ -472,7 +532,8 @@
             link.click();
         }
 
-        const HEADER_FIELDS = ["Datum", "Typ", "Kategorie", "Artikelname", "Warenwert (€)", "VK-Preis (€)", "Kosten (€)", "Status", "Netto-Wert (€)"];
+        // NEU: ID in den Header aufgenommen
+        const HEADER_FIELDS = ["ID", "Datum", "Typ", "Kategorie", "Artikelname", "Warenwert (€)", "VK-Preis (€)", "Kosten (€)", "Status", "Netto-Wert (€)"];
 
         function erstelleCSV(transaktionen) {
             let csvContent = HEADER_FIELDS.join(';') + "\n";
@@ -480,6 +541,7 @@
             transaktionen.forEach(eintrag => {
                 const nettoWert = berechneAktuellenWert(eintrag);
                 const row = [
+                    eintrag.id || '', // ID
                     eintrag.datum,
                     eintrag.typ,
                     eintrag.kategorie || 'Sonstiges',
@@ -495,20 +557,18 @@
             return csvContent;
         }
 
-        /** Exportiert alle Transaktionen als CSV (Vollständig). */
+        // Export Funktionen (unverändert in der Logik)
         window.exportiereAlsCSV = function() {
             const transaktionen = ladeEinnahmen();
             if (transaktionen.length === 0) {
                 alert('Keine Daten zum Exportieren vorhanden.');
                 return;
             }
-
             const csvContent = erstelleCSV(transaktionen);
             const filename = 'fahrradteile_transaktionen_vollstaendig_' + new Date().toISOString().split('T')[0] + '.csv';
             starteDownload(csvContent, filename);
         }
         
-        /** Exportiert den aktuellen Bestand (Status != bezahlt) als CSV. */
         window.exportiereBestand = function() {
             const transaktionen = ladeEinnahmen();
             if (transaktionen.length === 0) {
@@ -516,77 +576,39 @@
                 return;
             }
             const bestandsTransaktionen = transaktionen.filter(t => t.verkaufStatus !== 'bezahlt');
-            
             const csvContent = erstelleCSV(bestandsTransaktionen);
             const filename = 'fahrradteile_bestand_offen_' + new Date().toISOString().split('T')[0] + '.csv';
             starteDownload(csvContent, filename);
         }
 
-        /** Exportiert nach gewähltem Status */
         window.exportiereNachStatusFilter = function() {
             const statusFilter = exportStatusFilter.value;
             const transaktionen = ladeEinnahmen();
-            if (transaktionen.length === 0) {
-                alert('Keine Daten zum Exportieren vorhanden.');
-                return;
-            }
-            
-            let gefilterteTransaktionen = transaktionen;
-
-            if (statusFilter !== 'alle') {
-                gefilterteTransaktionen = transaktionen.filter(t => t.verkaufStatus === statusFilter);
-            }
-            
-            if (gefilterteTransaktionen.length === 0) {
-                alert(`Keine Transaktionen mit Status "${statusFilter.toUpperCase().replace('_', ' ')}" gefunden.`);
-                return;
-            }
-
+            if (transaktionen.length === 0) { alert('Keine Daten zum Exportieren vorhanden.'); return; }
+            let gefilterteTransaktionen = statusFilter !== 'alle' ? transaktionen.filter(t => t.verkaufStatus === statusFilter) : transaktionen;
+            if (gefilterteTransaktionen.length === 0) { alert(`Keine Transaktionen mit Status "${statusFilter.toUpperCase().replace('_', ' ')}" gefunden.`); return; }
             const csvContent = erstelleCSV(gefilterteTransaktionen);
             const filename = `fahrradteile_export_status_${statusFilter}_` + new Date().toISOString().split('T')[0] + '.csv';
             starteDownload(csvContent, filename);
         }
         
-        /** Exportiert nur Zeilen der gewählten Kategorie. */
         window.exportiereNachKategorieFilter = function() {
             const kategorieFilter = document.getElementById('exportKategorieFilter').value;
             const transaktionen = ladeEinnahmen();
-            
-            if (transaktionen.length === 0) {
-                alert('Keine Daten zum Exportieren vorhanden.');
-                return;
-            }
-            
-            let gefilterteTransaktionen = transaktionen;
-
-            if (kategorieFilter !== 'alle') {
-                // Filtern basierend auf Kategorie (oder 'Sonstiges' falls Kategorie fehlt)
-                gefilterteTransaktionen = transaktionen.filter(t => (t.kategorie || 'Sonstiges') === kategorieFilter);
-            }
-            
-            if (gefilterteTransaktionen.length === 0) {
-                alert(`Keine Transaktionen in der Kategorie "${kategorieFilter}" gefunden.`);
-                return;
-            }
-
+            if (transaktionen.length === 0) { alert('Keine Daten zum Exportieren vorhanden.'); return; }
+            let gefilterteTransaktionen = kategorieFilter !== 'alle' ? transaktionen.filter(t => (t.kategorie || 'Sonstiges') === kategorieFilter) : transaktionen;
+            if (gefilterteTransaktionen.length === 0) { alert(`Keine Transaktionen in der Kategorie "${kategorieFilter}" gefunden.`); return; }
             const csvContent = erstelleCSV(gefilterteTransaktionen);
             const filename = `fahrradteile_export_kategorie_${kategorieFilter}_` + new Date().toISOString().split('T')[0] + '.csv';
             starteDownload(csvContent, filename);
         }
-        
-        /** Exportiert die wichtigsten EÜR-Summen als CSV. */
+
         window.exportiereAlsEUESumme = function() {
             const transaktionen = ladeEinnahmen();
-            if (transaktionen.length === 0) {
-                alert('Keine Daten zum Exportieren vorhanden.');
-                return;
-            }
-
+            if (transaktionen.length === 0) { alert('Keine Daten zum Exportieren vorhanden.'); return; }
             let summeEinnahmen = 0;
             let summeWarenEK = 0;
             let summeLaufendeKosten = 0;
-
-            // Zähle nur Transaktionen mit Status 'bezahlt' für die EÜR
             transaktionen.forEach(eintrag => {
                 if (eintrag.verkaufStatus === 'bezahlt') {
                     summeEinnahmen += eintrag.einnahmeVerkaufspreis;
@@ -594,100 +616,63 @@
                     summeLaufendeKosten += eintrag.kosten;
                 }
             });
-            
             const nettoUeberschuss = summeEinnahmen - summeWarenEK - summeLaufendeKosten;
-
             const header = ["EÜR Position", "Betrag (€)"];
             let csvContent = header.join(';') + "\n";
             const datum = new Date().toISOString().split('T')[0];
-
             csvContent += "Stand am " + datum + " (Nur bezahlte Transaktionen);\n";
             csvContent += "Summe Betriebseinnahmen (VK Erlöse);"+ summeEinnahmen.toFixed(2).replace('.', ',') + "\n";
             csvContent += "Summe Wareneinkauf (Warenwerte bei Übernahme);"+ summeWarenEK.toFixed(2).replace('.', ',') + "\n";
             csvContent += "Summe Laufende Kosten (Porto/Gebühren);"+ summeLaufendeKosten.toFixed(2).replace('.', ',') + "\n";
             csvContent += "Netto-Überschuss (Einnahmen abzgl. Ausgaben);"+ nettoUeberschuss.toFixed(2).replace('.', ',') + "\n";
-            
             const filename = 'fahrradteile_euer_summe_' + datum + '.csv';
             starteDownload(csvContent, filename);
         }
 
-        /** Exportiert die Summen pro Kategorie als CSV. */
         window.exportiereKategorienSumme = function() {
             const transaktionen = ladeEinnahmen();
-            if (transaktionen.length === 0) {
-                alert('Keine Daten zum Exportieren vorhanden.');
-                return;
-            }
-
+            if (transaktionen.length === 0) { alert('Keine Daten zum Exportieren vorhanden.'); return; }
             const kategorienSumme = {};
-
-            // 1. Summierung der Beträge nach Kategorie
             transaktionen.forEach(eintrag => {
                 const kategorie = eintrag.kategorie || 'Sonstiges';
                 const nettoWert = berechneAktuellenWert(eintrag);
-
-                if (!kategorienSumme[kategorie]) {
-                    kategorienSumme[kategorie] = {
-                        einnahmen: 0,
-                        warenwert: 0,
-                        kosten: 0,
-                        netto: 0
-                    };
-                }
-
+                if (!kategorienSumme[kategorie]) { kategorienSumme[kategorie] = { einnahmen: 0, warenwert: 0, kosten: 0, netto: 0 }; }
                 kategorienSumme[kategorie].einnahmen += eintrag.einnahmeVerkaufspreis;
                 kategorienSumme[kategorie].warenwert += eintrag.warenwertBeiUebernahme;
                 kategorienSumme[kategorie].kosten += eintrag.kosten;
                 kategorienSumme[kategorie].netto += nettoWert;
             });
-            
-            // 2. Erstellen der CSV-Daten
             const header = ["Kategorie", "Summe VK Erlöse (€)", "Summe Warenwert (€)", "Summe Kosten (€)", "Netto Ergebnis (€)"];
             let csvContent = header.join(';') + "\n";
-            
             const datum = new Date().toISOString().split('T')[0];
             csvContent += "Stand am " + datum + ";;;;\n";
-
             const sortierteKategorien = Object.keys(kategorienSumme).sort();
-            
             let gesamtEinnahmen = 0;
             let gesamtWarenwert = 0;
             let gesamtKosten = 0;
             let gesamtNetto = 0;
-
             sortierteKategorien.forEach(kategorie => {
                 const summen = kategorienSumme[kategorie];
-                
                 gesamtEinnahmen += summen.einnahmen;
                 gesamtWarenwert += summen.warenwert;
                 gesamtKosten += summen.kosten;
                 gesamtNetto += summen.netto;
-
-                const row = [
-                    kategorie,
-                    summen.einnahmen.toFixed(2).replace('.', ','),
-                    summen.warenwert.toFixed(2).replace('.', ','),
-                    summen.kosten.toFixed(2).replace('.', ','),
-                    summen.netto.toFixed(2).replace('.', ',')
-                ];
+                const row = [ kategorie, summen.einnahmen.toFixed(2).replace('.', ','), summen.warenwert.toFixed(2).replace('.', ','), summen.kosten.toFixed(2).replace('.', ','), summen.netto.toFixed(2).replace('.', ',') ];
                 csvContent += row.join(';') + "\n";
             });
-
-            // 3. Hinzufügen der Gesamtsumme (Fusszeile)
             csvContent += ";;;;\n"; 
             csvContent += "GESAMTSUMME (ALLE KATEGORIEN);" 
                 + gesamtEinnahmen.toFixed(2).replace('.', ',') + ";"
                 + gesamtWarenwert.toFixed(2).replace('.', ',') + ";"
                 + gesamtKosten.toFixed(2).replace('.', ',') + ";"
                 + gesamtNetto.toFixed(2).replace('.', ',') + "\n";
-
             const filename = 'fahrradteile_kategorien_summe_' + datum + '.csv';
             starteDownload(csvContent, filename);
         }
 
 
         // =========================================================================
-        // 6. CSV-Import 
+        // 6. CSV-Import (Anpassung an 9 Datenfelder + 1 ID-Feld)
         // =========================================================================
 
         csvFileInput.addEventListener('change', function(event) {
@@ -702,38 +687,43 @@
             event.target.value = '';
         });
 
-        /** Verarbeitet die CSV-Daten (erwartet 8 Datenfelder). */
+        /** Verarbeitet die CSV-Daten (erwartet 9 Datenfelder + ID). */
         function verarbeiteImportierteCSV(csvText) {
-            // Ignoriere Header-Zeilen der verschiedenen Exporte
-            const lines = csvText.split('\n').filter(line => line.trim() !== '' && !line.startsWith("Datum") && !line.startsWith("Stand") && !line.startsWith("EÜR Position") && !line.startsWith("Kategorie")); 
+            // Ignoriere Header-Zeilen
+            const lines = csvText.split('\n').filter(line => line.trim() !== '' && !line.startsWith("ID") && !line.startsWith("Stand") && !line.startsWith("EÜR Position") && !line.startsWith("Kategorie")); 
             
             if (lines.length === 0) {
                 alert('CSV-Datei enthält keine Datenzeilen oder die Daten sind nicht im erwarteten Format.');
                 return;
             }
 
+            const aktuelleEinnahmen = ladeEinnahmen();
             const neueEinnahmen = [];
             let fehlerZaehler = 0;
+            let nextID = getNextID(aktuelleEinnahmen);
 
             lines.forEach(line => {
                 const values = line.split(';');
 
-                if (values.length >= 8) { 
+                // Wir erwarten jetzt 10 Felder, aber der Netto-Wert (Feld 9) wird ignoriert, da er berechnet wird.
+                if (values.length >= 9) { 
                     try {
-                        const datum = values[0].trim();
-                        const typ = values[1].toLowerCase().trim();
-                        const kategorie = values[2].trim(); // Importiert neue Kategorien wie 'Komplettrad' automatisch
-                        // Entferne Anführungszeichen, die durch den CSV-Export hinzugefügt wurden
-                        const artikelName = values[3].replace(/"/g, '').trim(); 
+                        // NEU: ID aus CSV lesen (Feld 0) oder neue ID zuweisen
+                        const id = parseInt(values[0].replace(/[^0-9]/g, '')) || nextID++;
+                        const datum = values[1].trim();
+                        const typ = values[2].toLowerCase().trim();
+                        const kategorie = values[3].trim(); 
+                        const artikelName = values[4].replace(/"/g, '').trim(); 
                         
-                        // Ersetze Komma durch Punkt für parseFloat
-                        const warenwertBeiUebernahme = parseFloat(values[4].replace(',', '.'));
-                        const einnahmeVerkaufspreis = parseFloat(values[5].replace(',', '.'));
-                        const kosten = parseFloat(values[6].replace(',', '.'));
-                        const verkaufStatus = values[7].toLowerCase().trim().replace(' ', '_'); 
+                        // Ab hier sind die Feld-Indizes um 1 nach hinten verschoben
+                        const warenwertBeiUebernahme = parseFloat(values[5].replace(',', '.'));
+                        const einnahmeVerkaufspreis = parseFloat(values[6].replace(',', '.'));
+                        const kosten = parseFloat(values[7].replace(',', '.'));
+                        const verkaufStatus = values[8].toLowerCase().trim().replace(' ', '_'); 
 
                         if (!isNaN(warenwertBeiUebernahme) && !isNaN(einnahmeVerkaufspreis) && !isNaN(kosten) && (typ === 'verkauf' || typ === 'einkauf')) {
                             neueEinnahmen.push({
+                                id: id,
                                 datum: datum,
                                 typ: typ,
                                 kategorie: kategorie,
@@ -743,6 +733,8 @@
                                 kosten: kosten,
                                 verkaufStatus: verkaufStatus,
                             });
+                            // Stelle sicher, dass die neue ID (falls verwendet) den Zähler erhöht
+                            if (id === nextID - 1) nextID = id + 1;
                         } else {
                             fehlerZaehler++;
                         }
@@ -755,7 +747,6 @@
             });
 
             if (neueEinnahmen.length > 0) {
-                const aktuelleEinnahmen = ladeEinnahmen();
                 const bestaetigung = confirm(`Sollen ${neueEinnahmen.length} gültige Einträge zu den existierenden ${aktuelleEinnahmen.length} Einträgen hinzugefügt werden?`);
 
                 if (bestaetigung) {
